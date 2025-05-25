@@ -7,10 +7,12 @@ import { AuroraText } from "./components/magicui/aurora-text";
 import { ShimmerButton } from "./components/magicui/shimmer-button";
 import { InteractiveHoverButton } from "./components/magicui/interactive-hover-button";
 import { Login } from "./pages/Login";
+import { SignUp } from "./pages/SignUp";
 import { useState } from "react";
 
 function App() {
   const [loginOpen, setLoginOpen] = useState(false);
+  const [signUpOpen, setSignUpOpen] = useState(false);
 
   return (
     <>
@@ -23,10 +25,12 @@ function App() {
               <AuroraText>CI/CD</AuroraText>
             </span>
             <div className="flex items-center gap-4">
-              <InteractiveHoverButton>Login</InteractiveHoverButton>
+              <InteractiveHoverButton onClick={() => setLoginOpen(true)}>
+                Login
+              </InteractiveHoverButton>
               <ShimmerButton
                 className="shadow-2xl"
-                onClick={() => setLoginOpen(true)}
+                onClick={() => setSignUpOpen(true)}
               >
                 <span className="whitespace-pre-wrap text-center text-sm font-medium leading-none tracking-tight text-white dark:from-white dark:to-slate-900/10 lg:text-lg">
                   Try Now
@@ -34,6 +38,7 @@ function App() {
               </ShimmerButton>
             </div>
             <Login open={loginOpen} onOpenChange={setLoginOpen} />
+            <SignUp open={signUpOpen} onOpenChange={setSignUpOpen} />
           </div>
         </header>
         <div className="relative w-full h-full max-w-[1000px] max-h-[1000px] flex flex-col items-center justify-center">
