@@ -1,5 +1,4 @@
 // components/LoginModal.tsx
-"use client";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useTheme } from "next-themes";
@@ -11,6 +10,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useNavigate } from "react-router-dom";
+import React from "react";
+import { useState } from "react";
+import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -25,6 +28,31 @@ export function Login({
   onOpenChange: (open: boolean) => void;
 }) {
   const { theme } = useTheme();
+
+  const navigate = useNavigate();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      alert("Login failed: " + error.message);
+    } else {
+      onOpenChange(false); // Close modal
+      navigate("#/dashboard"); // or wherever you want to navigate after login
+    }
+
+    setLoading(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -43,7 +71,7 @@ export function Login({
               </CardHeader>
 
               <CardContent className="p-4">
-                <form>
+                <form onSubmit={handleLogin}>
                   <div className="grid gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="email">Email</Label>
@@ -51,19 +79,31 @@ export function Login({
                         id="email"
                         type="email"
                         placeholder="name@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                       />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="password">Password</Label>
-                      <Input id="password" type="password" />
+                      <Input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                      />
                     </div>
                   </div>
+                  <Button
+                    type="submit"
+                    className="mt-4 w-full"
+                    disabled={loading}
+                  >
+                    {loading ? "Logging in..." : "Login"}
+                  </Button>
                 </form>
               </CardContent>
 
               <CardFooter className="flex flex-col gap-4 p-4 border-t border-border">
-                <Button className="w-full">Login</Button>
-
                 <div className="relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center">
                   <span className="text-muted-foreground relative z-10 px-2">
                     Or continue with
