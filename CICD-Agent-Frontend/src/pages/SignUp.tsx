@@ -1,6 +1,6 @@
 "use client";
 
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog,DialogTitle,DialogDescription, DialogContent } from "@/components/ui/dialog";
 import { useTheme } from "next-themes";
 import {
   Card,
@@ -10,6 +10,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { supabase } from "@/lib/supabase";
+import React from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -25,6 +28,34 @@ export function SignUp({
 }) {
   const { theme } = useTheme();
 
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.auth.signUp({ email, password });
+    setLoading(false);
+
+    if (error) {
+      setError(error.message);
+      console.error("Sign up error:", error);
+    } else {
+      // Optionally: show success state or redirect
+      onOpenChange(false); // close dialog
+      console.log("Sign up successful.");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="p-0 max-w-md bg-transparent border-none shadow-none">
@@ -35,14 +66,18 @@ export function SignUp({
               className="p-0"
             >
               <CardHeader className="border-b border-border p-4">
-                <CardTitle>Sign Up</CardTitle>
-                <CardDescription>
-                  Create your account by filling in the details
-                </CardDescription>
+                <DialogTitle asChild>
+    <CardTitle>Sign Up</CardTitle>
+  </DialogTitle>
+  <DialogDescription asChild>
+    <CardDescription>
+      Create your account by filling in the details
+    </CardDescription>
+  </DialogDescription>
               </CardHeader>
 
               <CardContent className="p-4">
-                <form>
+                <form onSubmit={handleSignUp} className="grid gap-4">
                   <div className="grid gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="email">Email</Label>
@@ -50,22 +85,45 @@ export function SignUp({
                         id="email"
                         type="email"
                         placeholder="name@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
                       />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="password">Password</Label>
-                      <Input id="password" type="password" />
+                      <Input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                      />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="confirmPassword">Confirm Password</Label>
-                      <Input id="confirmPassword" type="password" />
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                      />
                     </div>
+                    {error && (
+                      <p className="text-sm text-red-500 font-medium">
+                        {error}
+                      </p>
+                    )}
                   </div>
+                  <Button type="submit" className="mt-4 w-full" disabled={loading}>
+                    {loading ? "Signing up..." : "Sign Up"}
+                  </Button>
                 </form>
               </CardContent>
 
               <CardFooter className="flex flex-col gap-4 p-4 border-t border-border">
-                <Button className="w-full">Sign Up</Button>
+                
 
                 <div className="relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center">
                   <span className="text-muted-foreground relative z-10 px-2">
@@ -81,7 +139,7 @@ export function SignUp({
                   </Button>
 
                   {/* Google */}
-                  <Button variant="outline" type="button" className="w-full">
+                  <Button variant="outline" type="submit" className="w-full">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       viewBox="0 0 24 24"
