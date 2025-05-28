@@ -48,7 +48,7 @@ export function Login({
       alert("Login failed: " + error.message);
     } else {
       onOpenChange(false); // Close modal
-      navigate("#/dashboard"); // or wherever you want to navigate after login
+      navigate("/chat"); // or wherever you want to navigate after login
     }
 
     setLoading(false);
