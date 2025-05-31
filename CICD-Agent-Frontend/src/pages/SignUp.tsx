@@ -1,6 +1,11 @@
 "use client";
 
-import { Dialog,DialogTitle,DialogDescription, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogTitle,
+  DialogDescription,
+  DialogContent,
+} from "@/components/ui/dialog";
 import { useTheme } from "next-themes";
 import {
   Card,
@@ -67,13 +72,13 @@ export function SignUp({
             >
               <CardHeader className="border-b border-border p-4">
                 <DialogTitle asChild>
-    <CardTitle>Sign Up</CardTitle>
-  </DialogTitle>
-  <DialogDescription asChild>
-    <CardDescription>
-      Create your account by filling in the details
-    </CardDescription>
-  </DialogDescription>
+                  <CardTitle>Sign Up</CardTitle>
+                </DialogTitle>
+                <DialogDescription asChild>
+                  <CardDescription>
+                    Create your account by filling in the details
+                  </CardDescription>
+                </DialogDescription>
               </CardHeader>
 
               <CardContent className="p-4">
@@ -116,15 +121,17 @@ export function SignUp({
                       </p>
                     )}
                   </div>
-                  <Button type="submit" className="mt-4 w-full" disabled={loading}>
+                  <Button
+                    type="submit"
+                    className="mt-4 w-full"
+                    disabled={loading}
+                  >
                     {loading ? "Signing up..." : "Sign Up"}
                   </Button>
                 </form>
               </CardContent>
 
               <CardFooter className="flex flex-col gap-4 p-4 border-t border-border">
-                
-
                 <div className="relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center">
                   <span className="text-muted-foreground relative z-10 px-2">
                     Or continue with
