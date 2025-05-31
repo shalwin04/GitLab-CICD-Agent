@@ -28,6 +28,20 @@ const Chat: React.FC = () => {
     }
   };
 
+  const connectWithGitLab = () => {
+    window.open(
+      "https://gitlab.com/oauth/authorize?client_id=YOUR_ID",
+      "_blank"
+    );
+  };
+
+  const connectWithGoogleCloud = () => {
+    window.open(
+      "https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_ID",
+      "_blank"
+    );
+  };
+
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden bg-black text-white px-4 py-8">
       <header className="fixed top-0 left-0 z-50 w-full px-6 py-4">
@@ -36,10 +50,16 @@ const Chat: React.FC = () => {
             Agentic <AuroraText>Chat</AuroraText>
           </span>
           <div className="flex gap-4">
-            <ShimmerButton className="text-sm px-4 py-2">
+            <ShimmerButton
+              onClick={connectWithGitLab}
+              className="text-sm px-4 py-2"
+            >
               <FaGitlab className="mr-2" /> Connect with GitLab
             </ShimmerButton>
-            <ShimmerButton className="text-sm px-4 py-2">
+            <ShimmerButton
+              onClick={connectWithGoogleCloud}
+              className="text-sm px-4 py-2"
+            >
               <FaGoogle className="mr-2" />
               Connect with Google Cloud
             </ShimmerButton>
