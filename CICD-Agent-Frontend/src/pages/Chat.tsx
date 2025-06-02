@@ -29,10 +29,13 @@ const Chat: React.FC = () => {
   };
 
   const connectWithGitLab = () => {
-    window.open(
-      "https://gitlab.com/oauth/authorize?client_id=YOUR_ID",
-      "_blank"
+    const clientId = import.meta.env.VITE_GITLAB_CLIENT_ID;
+    const redirectUri = encodeURIComponent(
+      "http://localhost:5173/oauth/callback"
     );
+    const scope = "read_user";
+    const url = `https://gitlab.com/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
+    window.location.href = url;
   };
 
   const connectWithGoogleCloud = () => {
