@@ -56,6 +56,14 @@ const oauthCallbackHandler: RequestHandler<{}, any, OAuthCallbackBody> = async (
       body: params.toString(),
     });
 
+    console.log("Sending token exchange with:", {
+      client_id: GITLAB_CLIENT_ID,
+      client_secret: GITLAB_CLIENT_SECRET,
+      code,
+      redirect_uri: redirectUri,
+    });
+    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(
