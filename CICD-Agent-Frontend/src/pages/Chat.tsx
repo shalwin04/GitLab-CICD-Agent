@@ -12,6 +12,8 @@ import { FaGoogle } from "react-icons/fa6";
 const Chat: React.FC = () => {
   const [message, setMessage] = useState("");
   const [chatHistory, setChatHistory] = useState<string[]>([]);
+  const [isGitLabConnected, setIsGitLabConnected] = useState(false);
+
 
   useEffect(() => {
     const scrollContainer = document.querySelector(".scroll-area-class");
@@ -20,6 +22,14 @@ const Chat: React.FC = () => {
       behavior: "smooth",
     });
   }, [chatHistory]);
+
+  useEffect(() => {
+    const gitlabToken = localStorage.getItem("accessToken");
+    if (gitlabToken) {
+      setIsGitLabConnected(true);
+    }
+  }, []);
+  
 
   const sendMessage = () => {
     if (message.trim()) {
@@ -53,12 +63,27 @@ const Chat: React.FC = () => {
             Agentic <AuroraText>Chat</AuroraText>
           </span>
           <div className="flex gap-4">
-            <ShimmerButton
-              onClick={connectWithGitLab}
-              className="text-sm px-4 py-2"
-            >
-              <FaGitlab className="mr-2" /> Connect with GitLab
-            </ShimmerButton>
+          <ShimmerButton
+  onClick={connectWithGitLab}
+  className={cn(
+    "text-sm px-4 py-2 flex items-center",
+    isGitLabConnected && "bg-green-600 hover:bg-green-700"
+  )}
+  disabled={isGitLabConnected}
+>
+  {isGitLabConnected ? (
+    <>
+      <FaGitlab className="mr-2" />
+      Connected ✓
+    </>
+  ) : (
+    <>
+      <FaGitlab className="mr-2" />
+      Connect with GitLab
+    </>
+  )}
+</ShimmerButton>
+
             <ShimmerButton
               onClick={connectWithGoogleCloud}
               className="text-sm px-4 py-2"

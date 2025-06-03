@@ -17,7 +17,7 @@ function App() {
           <Chat />
         }
       />
-      <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/oauth/callback" element={<AuthCallback />} />
       {/* <Route path="*" element={<NotFound />} /> */}
     </Routes>
   );
