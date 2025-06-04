@@ -2,6 +2,8 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import express from "express";
+import cors from "cors";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -507,12 +509,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function runServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("GitLab MCP Server running on stdio");
-}
+  const app = express();
+  app.use(cors());
 
-runServer().catch((error) => {
-  console.error("Fatal error in main():", error);
-  process.exit(1);
-});
+  app.get("/health", (_, res) => res.send("OK"));
+
+  // SSE endpoint
+  app.get("/events", async (req, res) => {
+    // Set headers for SSE
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    // Keep connection alive
+    res.flushHeaders();
+
+    const transport = {
+      send: (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      },
+      close: () => {
+        res.end();
+      },
+      onMessage: (handler: any) => {
+        // Not needed for SSE as it's one-way
+      },
+    };
+
+    await server.connect(transport);
+
+    // Optional: close connection after timeout
+    req.on("close", () => {
+      console.log("SSE client disconnected");
+      transport.close();
+    });
+  });
+
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`MCP SSE Server running at http://localhost:${PORT}`);
+  });
+}
