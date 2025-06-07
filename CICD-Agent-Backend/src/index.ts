@@ -1,8 +1,10 @@
+// index.ts
 import express from "express";
-import type { Request, Response, RequestHandler } from "express";
+import type { RequestHandler } from "express";
 import cors from "cors";
-import fetch from "node-fetch"; // or use `undici` in newer Node.js versions
 import dotenv from "dotenv";
+import { exchangeGitlabToken } from "./utils/exchangeGitlabToken.js";
+import { v4 as uuidv4 } from "uuid";
 
 dotenv.config();
 
@@ -16,23 +18,7 @@ const PORT = 4000;
 app.use(cors());
 app.use(express.json());
 
-interface OAuthCallbackBody {
-  code: string;
-}
-
-interface GitLabOAuthResponse {
-  access_token?: string;
-  token_type?: string;
-  expires_in?: number;
-  refresh_token?: string;
-  error?: string;
-  error_description?: string;
-}
-
-const oauthCallbackHandler: RequestHandler<{}, any, OAuthCallbackBody> = async (
-  req,
-  res
-) => {
+const oauthCallbackHandler: RequestHandler = async (req, res) => {
   const { code } = req.body;
   const redirectUri = "http://localhost:5173/oauth/callback";
 
@@ -41,54 +27,35 @@ const oauthCallbackHandler: RequestHandler<{}, any, OAuthCallbackBody> = async (
     return;
   }
 
-  const params = new URLSearchParams({
-    client_id: GITLAB_CLIENT_ID,
-    client_secret: GITLAB_CLIENT_SECRET,
-    code,
-    grant_type: "authorization_code",
-    redirect_uri: redirectUri,
-  });
-
   try {
-    const response = await fetch("https://gitlab.com/oauth/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
-
-    console.log("Sending token exchange with:", {
-      client_id: GITLAB_CLIENT_ID,
-      client_secret: GITLAB_CLIENT_SECRET,
+    const data = await exchangeGitlabToken(
+      GITLAB_CLIENT_ID,
+      GITLAB_CLIENT_SECRET,
       code,
-      redirect_uri: redirectUri,
-    });
-    
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `GitLab token fetch failed: ${response.status} - ${errorText}`
-      );
-      res.status(500).json({ error: "Failed to retrieve token from GitLab" });
-      return;
-    }
-
-    const data = (await response.json()) as GitLabOAuthResponse;
+      redirectUri
+    );
 
     if (data.error) {
       res.status(400).json({ error: data.error_description });
       return;
     }
 
-    res.status(200).json(data);
-    return;
+    // Session handling (optional)
+    const sessionId = uuidv4();
+
+    // (Optional) send token to MCP
+    await fetch("http://localhost:3001/store-token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "mcp-session-id": sessionId,
+      },
+      body: JSON.stringify({ token: data.access_token }),
+    });
+
+    res.status(200).json({ ...data, sessionId });
   } catch (err) {
-    if (err instanceof Error) {
-      console.error(err.message);
-      res.status(500).json({ error: "Internal server error" });
-      return;
-    }
-    console.error("Unknown error occurred");
+    console.error("OAuth Callback Error:", err);
     res.status(500).json({ error: "Internal server error" });
     return;
   }
