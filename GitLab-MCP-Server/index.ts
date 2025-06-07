@@ -63,20 +63,35 @@ const server = new Server(
   }
 );
 
-const GITLAB_PERSONAL_ACCESS_TOKEN = process.env.GITLAB_PERSONAL_ACCESS_TOKEN;
+// Session management with proper cleanup following MCP SDK patterns
+interface SessionInfo {
+  transport: StreamableHTTPServerTransport;
+  lastActivity: number;
+  connected: boolean;
+  gitlabToken?: string; // Store token per session
+}
+
+const sessions = new Map<string, SessionInfo>();
+
 const GITLAB_API_URL =
   process.env.GITLAB_API_URL || "https://gitlab.com/api/v4";
 
-if (!GITLAB_PERSONAL_ACCESS_TOKEN) {
-  console.error("GITLAB_PERSONAL_ACCESS_TOKEN environment variable is not set");
-  process.exit(1);
+// Helper function to get token from session context
+function getTokenFromContext(): string {
+  // This will be set during request handling
+  const token = (global as any).__currentGitlabToken;
+  if (!token) {
+    throw new Error("GitLab access token not provided");
+  }
+  return token;
 }
 
-// [All your existing GitLab API functions remain the same]
+// Modified GitLab API functions to use dynamic token
 async function forkProject(
   projectId: string,
   namespace?: string
 ): Promise<GitLabFork> {
+  const token = getTokenFromContext();
   const url = `${GITLAB_API_URL}/projects/${encodeURIComponent(
     projectId
   )}/fork`;
@@ -87,7 +102,7 @@ async function forkProject(
   const response = await fetch(url + queryParams, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
   });
@@ -103,6 +118,7 @@ async function createBranch(
   projectId: string,
   options: z.infer<typeof CreateBranchOptionsSchema>
 ): Promise<GitLabReference> {
+  const token = getTokenFromContext();
   const response = await fetch(
     `${GITLAB_API_URL}/projects/${encodeURIComponent(
       projectId
@@ -110,7 +126,7 @@ async function createBranch(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -132,6 +148,7 @@ async function getFileContents(
   filePath: string,
   ref?: string
 ): Promise<GitLabContent> {
+  const token = getTokenFromContext();
   const encodedPath = encodeURIComponent(filePath);
   let url = `${GITLAB_API_URL}/projects/${encodeURIComponent(
     projectId
@@ -144,7 +161,7 @@ async function getFileContents(
 
   const response = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${token}`,
     },
   });
 
@@ -165,12 +182,13 @@ async function createIssue(
   projectId: string,
   options: z.infer<typeof CreateIssueOptionsSchema>
 ): Promise<GitLabIssue> {
+  const token = getTokenFromContext();
   const response = await fetch(
     `${GITLAB_API_URL}/projects/${encodeURIComponent(projectId)}/issues`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -194,6 +212,7 @@ async function createMergeRequest(
   projectId: string,
   options: z.infer<typeof CreateMergeRequestOptionsSchema>
 ): Promise<GitLabMergeRequest> {
+  const token = getTokenFromContext();
   const response = await fetch(
     `${GITLAB_API_URL}/projects/${encodeURIComponent(
       projectId
@@ -201,7 +220,7 @@ async function createMergeRequest(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -230,6 +249,7 @@ async function createOrUpdateFile(
   branch: string,
   previousPath?: string
 ): Promise<GitLabCreateUpdateFileResponse> {
+  const token = getTokenFromContext();
   const encodedPath = encodeURIComponent(filePath);
   const url = `${GITLAB_API_URL}/projects/${encodeURIComponent(
     projectId
@@ -254,7 +274,7 @@ async function createOrUpdateFile(
   const response = await fetch(url, {
     method,
     headers: {
-      Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -272,6 +292,7 @@ async function createTree(
   files: FileOperation[],
   ref?: string
 ): Promise<GitLabTree> {
+  const token = getTokenFromContext();
   const response = await fetch(
     `${GITLAB_API_URL}/projects/${encodeURIComponent(
       projectId
@@ -279,7 +300,7 @@ async function createTree(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -305,6 +326,7 @@ async function createCommit(
   branch: string,
   actions: FileOperation[]
 ): Promise<GitLabCommit> {
+  const token = getTokenFromContext();
   const response = await fetch(
     `${GITLAB_API_URL}/projects/${encodeURIComponent(
       projectId
@@ -312,7 +334,7 @@ async function createCommit(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -339,6 +361,7 @@ async function searchProjects(
   page: number = 1,
   perPage: number = 20
 ): Promise<GitLabSearchResponse> {
+  const token = getTokenFromContext();
   const url = new URL(`${GITLAB_API_URL}/projects`);
   url.searchParams.append("search", query);
   url.searchParams.append("page", page.toString());
@@ -346,7 +369,7 @@ async function searchProjects(
 
   const response = await fetch(url.toString(), {
     headers: {
-      Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${token}`,
     },
   });
 
@@ -364,10 +387,11 @@ async function searchProjects(
 async function createRepository(
   options: z.infer<typeof CreateRepositoryOptionsSchema>
 ): Promise<GitLabRepository> {
+  const token = getTokenFromContext();
   const response = await fetch(`${GITLAB_API_URL}/projects`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${GITLAB_PERSONAL_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -569,15 +593,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Session management with proper cleanup following MCP SDK patterns
-interface SessionInfo {
-  transport: StreamableHTTPServerTransport;
-  lastActivity: number;
-  connected: boolean;
-}
-
-const sessions = new Map<string, SessionInfo>();
-
 // Clean up inactive sessions every 5 minutes
 setInterval(() => {
   const now = Date.now();
@@ -605,6 +620,37 @@ async function runServer() {
   );
   app.use(express.json());
 
+  // Middleware to extract and validate GitLab token
+  const extractGitlabToken = (
+    req: Request,
+    res: Response,
+    next: express.NextFunction
+  ) => {
+    // Try multiple ways to get the token
+    let token =
+      (req.headers["x-gitlab-token"] as string) ||
+      (req.headers["gitlab-token"] as string) ||
+      req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
+      req.body?.gitlab_token;
+
+    if (!token) {
+      res.status(401).json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message:
+            "GitLab access token is required. Provide it via 'X-GitLab-Token', 'GitLab-Token', 'Authorization: Bearer <token>' header, or 'gitlab_token' in request body.",
+        },
+        id: req.body?.id || null,
+      });
+      return;
+    }
+
+    // Store token in global context for the duration of this request
+    (global as any).__currentGitlabToken = token;
+    next();
+  };
+
   // Health check endpoint
   app.get("/health", (_, res) => {
     res.json({
@@ -620,20 +666,23 @@ async function runServer() {
       id,
       lastActivity: new Date(info.lastActivity).toISOString(),
       connected: info.connected,
+      hasToken: !!info.gitlabToken,
     }));
     res.json({ sessions: sessionList });
   });
 
   // POST /mcp — handle MCP JSON-RPC requests (init + ongoing)
-  app.post("/mcp", async (req: Request, res: Response) => {
+  app.post("/mcp", extractGitlabToken, async (req: Request, res: Response) => {
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
+      const gitlabToken = (global as any).__currentGitlabToken;
       let sessionInfo: SessionInfo;
 
       if (sessionId && sessions.has(sessionId)) {
-        // Reuse existing session
+        // Reuse existing session and update token
         sessionInfo = sessions.get(sessionId)!;
         sessionInfo.lastActivity = Date.now();
+        sessionInfo.gitlabToken = gitlabToken; // Update token for this session
       } else if (!sessionId && isInitializeRequest(req.body)) {
         // New session init request - create transport
         const transport = new StreamableHTTPServerTransport({
@@ -647,6 +696,7 @@ async function runServer() {
           transport,
           lastActivity: Date.now(),
           connected: true,
+          gitlabToken, // Store token in session
         };
 
         // Setup cleanup on close using the proper onclose callback
@@ -695,6 +745,9 @@ async function runServer() {
         },
         id: req.body?.id || null,
       });
+    } finally {
+      // Clean up global token context
+      delete (global as any).__currentGitlabToken;
     }
   });
 
@@ -771,8 +824,7 @@ async function runServer() {
       cleanup();
     });
 
-    // Instead of using .on() and .off(), we let the transport handle notifications
-    // The transport will automatically send notifications through the SSE connection
+    // Handle the SSE request
     await sessionInfo.transport.handleRequest(req, res);
   });
 
@@ -802,13 +854,15 @@ async function runServer() {
   });
 
   // Error handling middleware
-  app.use((error: Error, req: Request, res: Response, next: Function) => {
-    console.error("Express error:", error);
-    res.status(500).json({
-      error: "Internal server error",
-      message: error.message,
-    });
-  });
+  app.use(
+    (error: Error, req: Request, res: Response, next: express.NextFunction) => {
+      console.error("Express error:", error);
+      res.status(500).json({
+        error: "Internal server error",
+        message: error.message,
+      });
+    }
+  );
 
   // Start server
   const PORT = process.env.PORT || 3001;
@@ -817,6 +871,9 @@ async function runServer() {
     console.log(`💓 Health check at http://localhost:${PORT}/health`);
     console.log(`📊 Sessions info at http://localhost:${PORT}/sessions`);
     console.log(`📡 MCP endpoints at http://localhost:${PORT}/mcp`);
+    console.log(
+      `🔑 Send GitLab tokens via 'X-GitLab-Token' header or 'Authorization: Bearer <token>'`
+    );
   });
 
   // Graceful shutdown
