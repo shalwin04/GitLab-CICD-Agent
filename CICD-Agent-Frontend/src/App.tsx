@@ -8,16 +8,8 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route
-        path="/chat"
-        element={
-          // <ProtectedRoute>
-          //   <Chat />
-          // </ProtectedRoute>
-          <Chat />
-        }
-      />
       <Route path="/oauth/callback" element={<AuthCallback />} />
+      <Route path="/chat" element={<Chat />} />
       {/* <Route path="*" element={<NotFound />} /> */}
     </Routes>
   );

@@ -14,7 +14,6 @@ const Chat: React.FC = () => {
   const [chatHistory, setChatHistory] = useState<string[]>([]);
   const [isGitLabConnected, setIsGitLabConnected] = useState(false);
 
-
   useEffect(() => {
     const scrollContainer = document.querySelector(".scroll-area-class");
     scrollContainer?.scrollTo({
@@ -29,7 +28,6 @@ const Chat: React.FC = () => {
       setIsGitLabConnected(true);
     }
   }, []);
-  
 
   const sendMessage = () => {
     if (message.trim()) {
@@ -40,11 +38,19 @@ const Chat: React.FC = () => {
 
   const connectWithGitLab = () => {
     const clientId = import.meta.env.VITE_GITLAB_CLIENT_ID;
-    const redirectUri = encodeURIComponent(
-      "http://localhost:5173/oauth/callback"
-    );
-    const scope = "read_user";
-    const url = `https://gitlab.com/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
+    const redirectUri = "http://localhost:5173/oauth/callback"; // Match backend exactly
+    const scope = "read_user api"; // Add 'api' scope for more permissions
+
+    const url = `https://gitlab.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=code&scope=${encodeURIComponent(scope)}`;
+
+    console.log("Initiating GitLab OAuth with:", {
+      clientId,
+      redirectUri,
+      scope,
+    });
+
     window.location.href = url;
   };
 
@@ -63,26 +69,26 @@ const Chat: React.FC = () => {
             Agentic <AuroraText>Chat</AuroraText>
           </span>
           <div className="flex gap-4">
-          <ShimmerButton
-  onClick={connectWithGitLab}
-  className={cn(
-    "text-sm px-4 py-2 flex items-center",
-    isGitLabConnected && "bg-green-600 hover:bg-green-700"
-  )}
-  disabled={isGitLabConnected}
->
-  {isGitLabConnected ? (
-    <>
-      <FaGitlab className="mr-2" />
-      Connected ✓
-    </>
-  ) : (
-    <>
-      <FaGitlab className="mr-2" />
-      Connect with GitLab
-    </>
-  )}
-</ShimmerButton>
+            <ShimmerButton
+              onClick={connectWithGitLab}
+              className={cn(
+                "text-sm px-4 py-2 flex items-center",
+                isGitLabConnected && "bg-green-600 hover:bg-green-700"
+              )}
+              disabled={isGitLabConnected}
+            >
+              {isGitLabConnected ? (
+                <>
+                  <FaGitlab className="mr-2" />
+                  Connected ✓
+                </>
+              ) : (
+                <>
+                  <FaGitlab className="mr-2" />
+                  Connect with GitLab
+                </>
+              )}
+            </ShimmerButton>
 
             <ShimmerButton
               onClick={connectWithGoogleCloud}
