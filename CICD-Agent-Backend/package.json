@@ -5,26 +5,31 @@
   "scripts": {
     "dev": "ts-node-dev --respawn src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/agents/chatAgent.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
+  "type": "module",
   "dependencies": {
-    "@langchain/community": "^0.3.43",
+    "@langchain/community": "^0.3.45",
     "@langchain/core": "^0.3.56",
+    "@langchain/google-genai": "^0.2.10",
     "@langchain/langgraph": "^0.2.72",
     "@langchain/mcp-adapters": "^0.5.2",
+    "@langchain/tavily": "^0.1.2",
     "axios": "^1.9.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
+    "eventsource": "^4.0.0",
     "express": "^5.1.0",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.18",
+    "@types/eventsource": "^1.1.15",
     "@types/express": "^5.0.2",
     "@types/node": "^22.15.20",
     "@types/node-fetch": "^2.6.12",
