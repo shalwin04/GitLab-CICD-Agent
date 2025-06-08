@@ -63,12 +63,13 @@ const server = new Server(
   }
 );
 
-// Session management with proper cleanup following MCP SDK patterns
+// Enhanced session management with proper token handling
 interface SessionInfo {
   transport: StreamableHTTPServerTransport;
   lastActivity: number;
   connected: boolean;
-  gitlabToken?: string; // Store token per session
+  gitlabToken: string; // Required GitLab token for this session
+  createdAt: number;
 }
 
 const sessions = new Map<string, SessionInfo>();
@@ -76,17 +77,68 @@ const sessions = new Map<string, SessionInfo>();
 const GITLAB_API_URL =
   process.env.GITLAB_API_URL || "https://gitlab.com/api/v4";
 
-// Helper function to get token from session context
-function getTokenFromContext(): string {
-  // This will be set during request handling
-  const token = (global as any).__currentGitlabToken;
-  if (!token) {
-    throw new Error("GitLab access token not provided");
-  }
-  return token;
+// Context for current request session
+interface RequestContext {
+  sessionId?: string;
+  gitlabToken?: string;
 }
 
-// Modified GitLab API functions to use dynamic token
+// JSON-RPC request interface
+interface JsonRpcRequest {
+  jsonrpc: string;
+  method?: string;
+  params?: any;
+  id?: string | number | null;
+}
+
+// Request-scoped context using AsyncLocalStorage-like pattern
+let currentContext: RequestContext = {};
+
+// Helper function to get token from current session context
+function getTokenFromContext(): string {
+  if (currentContext.gitlabToken) {
+    return currentContext.gitlabToken;
+  }
+
+  if (currentContext.sessionId) {
+    const session = sessions.get(currentContext.sessionId);
+    if (session?.gitlabToken) {
+      return session.gitlabToken;
+    }
+  }
+
+  throw new Error(
+    "GitLab access token not available in current session context"
+  );
+}
+
+// Helper function to extract token from various sources
+function extractGitlabToken(req: Request): string | null {
+  return (
+    (req.headers["x-gitlab-token"] as string) ||
+    (req.headers["gitlab-token"] as string) ||
+    req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
+    req.body?.gitlab_token ||
+    null
+  );
+}
+
+// Validate GitLab token by making a test API call
+async function validateGitlabToken(token: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${GITLAB_API_URL}/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.ok;
+  } catch (error) {
+    console.error("Token validation error:", error);
+    return false;
+  }
+}
+
+// Modified GitLab API functions to use context-aware token
 async function forkProject(
   projectId: string,
   namespace?: string
@@ -108,7 +160,8 @@ async function forkProject(
   });
 
   if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
   }
 
   return GitLabForkSchema.parse(await response.json());
@@ -137,7 +190,8 @@ async function createBranch(
   );
 
   if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
   }
 
   return GitLabReferenceSchema.parse(await response.json());
@@ -166,7 +220,8 @@ async function getFileContents(
   });
 
   if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
   }
 
   const data = GitLabContentSchema.parse(await response.json());
@@ -202,7 +257,8 @@ async function createIssue(
   );
 
   if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
   }
 
   return GitLabIssueSchema.parse(await response.json());
@@ -235,7 +291,8 @@ async function createMergeRequest(
   );
 
   if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
   }
 
   return GitLabMergeRequestSchema.parse(await response.json());
@@ -281,43 +338,11 @@ async function createOrUpdateFile(
   });
 
   if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
   }
 
   return GitLabCreateUpdateFileResponseSchema.parse(await response.json());
-}
-
-async function createTree(
-  projectId: string,
-  files: FileOperation[],
-  ref?: string
-): Promise<GitLabTree> {
-  const token = getTokenFromContext();
-  const response = await fetch(
-    `${GITLAB_API_URL}/projects/${encodeURIComponent(
-      projectId
-    )}/repository/tree`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        files: files.map((file) => ({
-          file_path: file.path,
-          content: file.content,
-        })),
-        ...(ref ? { ref } : {}),
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
-  }
-
-  return GitLabTreeSchema.parse(await response.json());
 }
 
 async function createCommit(
@@ -350,7 +375,8 @@ async function createCommit(
   );
 
   if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
   }
 
   return GitLabCommitSchema.parse(await response.json());
@@ -374,7 +400,8 @@ async function searchProjects(
   });
 
   if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
   }
 
   const projects = await response.json();
@@ -403,7 +430,8 @@ async function createRepository(
   });
 
   if (!response.ok) {
-    throw new Error(`GitLab API error: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
   }
 
   return GitLabRepositorySchema.parse(await response.json());
@@ -601,7 +629,11 @@ setInterval(() => {
   for (const [sessionId, session] of sessions) {
     if (now - session.lastActivity > TIMEOUT) {
       console.log(`Cleaning up inactive session: ${sessionId}`);
-      session.transport.close();
+      try {
+        session.transport.close();
+      } catch (error) {
+        console.error(`Error closing session ${sessionId}:`, error);
+      }
       sessions.delete(sessionId);
     }
   }
@@ -620,43 +652,13 @@ async function runServer() {
   );
   app.use(express.json());
 
-  // Middleware to extract and validate GitLab token
-  const extractGitlabToken = (
-    req: Request,
-    res: Response,
-    next: express.NextFunction
-  ) => {
-    // Try multiple ways to get the token
-    let token =
-      (req.headers["x-gitlab-token"] as string) ||
-      (req.headers["gitlab-token"] as string) ||
-      req.headers["authorization"]?.replace(/^Bearer\s+/i, "") ||
-      req.body?.gitlab_token;
-
-    if (!token) {
-      res.status(401).json({
-        jsonrpc: "2.0",
-        error: {
-          code: -32000,
-          message:
-            "GitLab access token is required. Provide it via 'X-GitLab-Token', 'GitLab-Token', 'Authorization: Bearer <token>' header, or 'gitlab_token' in request body.",
-        },
-        id: req.body?.id || null,
-      });
-      return;
-    }
-
-    // Store token in global context for the duration of this request
-    (global as any).__currentGitlabToken = token;
-    next();
-  };
-
   // Health check endpoint
   app.get("/health", (_, res) => {
     res.json({
       status: "OK",
       timestamp: new Date().toISOString(),
       activeSessions: sessions.size,
+      mcpVersion: "0.5.1",
     });
   });
 
@@ -665,59 +667,109 @@ async function runServer() {
     const sessionList = Array.from(sessions.entries()).map(([id, info]) => ({
       id,
       lastActivity: new Date(info.lastActivity).toISOString(),
+      createdAt: new Date(info.createdAt).toISOString(),
       connected: info.connected,
       hasToken: !!info.gitlabToken,
     }));
-    res.json({ sessions: sessionList });
+    res.json({ sessions: sessionList, total: sessions.size });
   });
 
   // POST /mcp — handle MCP JSON-RPC requests (init + ongoing)
-  app.post("/mcp", extractGitlabToken, async (req: Request, res: Response) => {
+  app.post("/mcp", async (req: Request, res: Response) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    const gitlabToken = extractGitlabToken(req);
+
     try {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
-      const gitlabToken = (global as any).__currentGitlabToken;
       let sessionInfo: SessionInfo;
 
+      // Cast req.body to JsonRpcRequest to access id property
+      const jsonRpcBody = req.body as JsonRpcRequest;
+
       if (sessionId && sessions.has(sessionId)) {
-        // Reuse existing session and update token
+        // Existing session - update activity and validate token
         sessionInfo = sessions.get(sessionId)!;
         sessionInfo.lastActivity = Date.now();
-        sessionInfo.gitlabToken = gitlabToken; // Update token for this session
+
+        // If a new token is provided, validate and update it
+        if (gitlabToken && gitlabToken !== sessionInfo.gitlabToken) {
+          const isValidToken = await validateGitlabToken(gitlabToken);
+          if (!isValidToken) {
+            res.status(401).json({
+              jsonrpc: "2.0",
+              error: {
+                code: -32000,
+                message: "Invalid GitLab access token provided",
+              },
+              id: jsonRpcBody?.id || null,
+            });
+            return;
+          }
+          sessionInfo.gitlabToken = gitlabToken;
+          console.log(`Updated token for session: ${sessionId}`);
+        }
       } else if (!sessionId && isInitializeRequest(req.body)) {
-        // New session init request - create transport
+        // New session initialization
+        if (!gitlabToken) {
+          res.status(401).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message:
+                "GitLab access token is required for session initialization. Provide it via 'X-GitLab-Token', 'GitLab-Token', 'Authorization: Bearer <token>' header, or 'gitlab_token' in request body.",
+            },
+            id: jsonRpcBody?.id || null,
+          });
+          return;
+        }
+
+        // Validate the token before creating session
+        const isValidToken = await validateGitlabToken(gitlabToken);
+        if (!isValidToken) {
+          res.status(401).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: "Invalid GitLab access token provided",
+            },
+            id: jsonRpcBody?.id || null,
+          });
+          return;
+        }
+
+        // Create new transport and session
+        const newSessionId = randomUUID(); // Generate session ID upfront
         const transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (newSessionId) => {
-            console.log(`New session initialized: ${newSessionId}`);
+          sessionIdGenerator: () => newSessionId,
+          onsessioninitialized: (sessionId) => {
+            console.log(
+              `New session initialized: ${sessionId} with valid token`
+            );
           },
         });
 
+        const now = Date.now();
         sessionInfo = {
           transport,
-          lastActivity: Date.now(),
+          lastActivity: now,
+          createdAt: now,
           connected: true,
-          gitlabToken, // Store token in session
+          gitlabToken,
         };
 
-        // Setup cleanup on close using the proper onclose callback
+        // Setup cleanup on close
         transport.onclose = () => {
-          if (transport.sessionId) {
-            console.log(`Session closed: ${transport.sessionId}`);
-            const session = sessions.get(transport.sessionId);
-            if (session) {
-              session.connected = false;
-              sessions.delete(transport.sessionId);
-            }
-          }
+          console.log(`Session closed: ${newSessionId}`);
+          sessions.delete(newSessionId);
         };
 
         // Connect transport to MCP server
         await server.connect(transport);
 
-        // Store session after connection
-        if (transport.sessionId) {
-          sessions.set(transport.sessionId, sessionInfo);
-        }
+        // Store session with the known ID
+        sessions.set(newSessionId, sessionInfo);
+
+        // Set the session ID in response headers
+        res.setHeader("mcp-session-id", newSessionId);
       } else {
         // Invalid request
         res.status(400).json({
@@ -727,15 +779,22 @@ async function runServer() {
             message:
               "Bad Request: No valid session ID provided or not an initialize request",
           },
-          id: req.body?.id || null,
+          id: jsonRpcBody?.id || null,
         });
         return;
       }
 
-      // Handle JSON-RPC request
+      // Set up request context for this request
+      currentContext = {
+        sessionId: sessionInfo.transport.sessionId,
+        gitlabToken: sessionInfo.gitlabToken,
+      };
+
+      // Handle the JSON-RPC request
       await sessionInfo.transport.handleRequest(req, res, req.body);
     } catch (error) {
       console.error("Error handling MCP request:", error);
+      const jsonRpcBody = req.body as JsonRpcRequest;
       res.status(500).json({
         jsonrpc: "2.0",
         error: {
@@ -743,11 +802,11 @@ async function runServer() {
           message: "Internal error",
           data: error instanceof Error ? error.message : String(error),
         },
-        id: req.body?.id || null,
+        id: jsonRpcBody?.id || null,
       });
     } finally {
-      // Clean up global token context
-      delete (global as any).__currentGitlabToken;
+      // Clean up request context
+      currentContext = {};
     }
   });
 
@@ -772,7 +831,7 @@ async function runServer() {
 
     console.log(`SSE connection established for session: ${sessionId}`);
 
-    // Setup SSE headers with proper configuration
+    // Setup SSE headers
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -780,10 +839,10 @@ async function runServer() {
       "Access-Control-Allow-Origin": req.headers.origin || "*",
       "Access-Control-Allow-Credentials": "true",
       "Access-Control-Expose-Headers": "mcp-session-id",
-      "X-Accel-Buffering": "no", // Disable nginx buffering
+      "X-Accel-Buffering": "no",
     });
 
-    // Send initial SSE comment to establish connection
+    // Send initial SSE comment
     res.write(": SSE connection established\n\n");
 
     // Keep-alive mechanism
@@ -791,15 +850,22 @@ async function runServer() {
       if (!res.destroyed) {
         res.write(": keep-alive\n\n");
       }
-    }, 30000); // Send keep-alive every 30 seconds
+    }, 30000);
 
     // Update session info
     sessionInfo.lastActivity = Date.now();
     sessionInfo.connected = true;
 
+    // Set up request context for SSE
+    currentContext = {
+      sessionId: sessionId,
+      gitlabToken: sessionInfo.gitlabToken,
+    };
+
     // Cleanup function
     const cleanup = () => {
       clearInterval(keepAliveInterval);
+      currentContext = {};
 
       if (!res.destroyed) {
         res.end();
@@ -809,23 +875,23 @@ async function runServer() {
     };
 
     // Handle client disconnect
-    req.on("close", () => {
-      console.log(`Client disconnected from session: ${sessionId}`);
-      cleanup();
-    });
-
+    req.on("close", cleanup);
     req.on("error", (error) => {
       console.error(`SSE request error for session ${sessionId}:`, error);
       cleanup();
     });
-
     res.on("error", (error) => {
       console.error(`SSE response error for session ${sessionId}:`, error);
       cleanup();
     });
 
     // Handle the SSE request
-    await sessionInfo.transport.handleRequest(req, res);
+    try {
+      await sessionInfo.transport.handleRequest(req, res);
+    } catch (error) {
+      console.error(`SSE handling error for session ${sessionId}:`, error);
+      cleanup();
+    }
   });
 
   // DELETE /mcp — close session
@@ -844,12 +910,20 @@ async function runServer() {
     }
 
     try {
+      // Set up request context for cleanup
+      currentContext = {
+        sessionId: sessionId,
+        gitlabToken: sessionInfo.gitlabToken,
+      };
+
       await sessionInfo.transport.handleRequest(req, res);
       sessions.delete(sessionId);
       console.log(`Session manually closed: ${sessionId}`);
     } catch (error) {
       console.error(`Error closing session ${sessionId}:`, error);
       res.status(500).json({ error: "Error closing session" });
+    } finally {
+      currentContext = {};
     }
   });
 
@@ -857,10 +931,12 @@ async function runServer() {
   app.use(
     (error: Error, req: Request, res: Response, next: express.NextFunction) => {
       console.error("Express error:", error);
-      res.status(500).json({
-        error: "Internal server error",
-        message: error.message,
-      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal server error",
+          message: error.message,
+        });
+      }
     }
   );
 
@@ -874,24 +950,42 @@ async function runServer() {
     console.log(
       `🔑 Send GitLab tokens via 'X-GitLab-Token' header or 'Authorization: Bearer <token>'`
     );
+    console.log(`🔒 Tokens are validated and stored securely per session`);
   });
 
   // Graceful shutdown
-  process.on("SIGINT", () => {
+  const gracefulShutdown = () => {
     console.log("\n🛑 Shutting down server...");
 
     // Close all active sessions
-    for (const [sessionId, sessionInfo] of sessions) {
-      console.log(`Closing session: ${sessionId}`);
-      sessionInfo.transport.close();
-    }
-    sessions.clear();
+    const sessionPromises = Array.from(sessions.entries()).map(
+      async ([sessionId, sessionInfo]) => {
+        try {
+          console.log(`Closing session: ${sessionId}`);
+          sessionInfo.transport.close();
+        } catch (error) {
+          console.error(`Error closing session ${sessionId}:`, error);
+        }
+      }
+    );
 
-    server_instance.close(() => {
-      console.log("✅ Server shut down gracefully");
-      process.exit(0);
+    Promise.all(sessionPromises).finally(() => {
+      sessions.clear();
+      server_instance.close(() => {
+        console.log("✅ Server shut down gracefully");
+        process.exit(0);
+      });
     });
-  });
+
+    // Force exit after 10 seconds
+    setTimeout(() => {
+      console.log("⚠️  Force closing server after timeout");
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on("SIGINT", gracefulShutdown);
+  process.on("SIGTERM", gracefulShutdown);
 }
 
 runServer().catch((error) => {
