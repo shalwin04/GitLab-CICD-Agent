@@ -49,6 +49,7 @@ import {
   type GitLabTree,
   type GitLabCommit,
   type FileOperation,
+  ListMyProjectsSchema,
 } from "./schemas.js";
 
 const server = new Server(
@@ -411,6 +412,47 @@ async function searchProjects(
   });
 }
 
+async function listMyProjects(
+  options: z.infer<typeof ListMyProjectsSchema> = {}
+): Promise<GitLabSearchResponse> {
+  const token = getTokenFromContext();
+  const url = new URL(`${GITLAB_API_URL}/projects`);
+
+  // Default to owned projects only
+  url.searchParams.append("owned", (options.owned ?? true).toString());
+
+  if (options.page) url.searchParams.append("page", options.page.toString());
+  if (options.per_page)
+    url.searchParams.append("per_page", options.per_page.toString());
+  if (options.membership)
+    url.searchParams.append("membership", options.membership.toString());
+  if (options.starred)
+    url.searchParams.append("starred", options.starred.toString());
+  if (options.archived !== undefined)
+    url.searchParams.append("archived", options.archived.toString());
+  if (options.visibility)
+    url.searchParams.append("visibility", options.visibility);
+  if (options.order_by) url.searchParams.append("order_by", options.order_by);
+  if (options.sort) url.searchParams.append("sort", options.sort);
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`GitLab API error (${response.status}): ${errorText}`);
+  }
+
+  const projects = await response.json();
+  return GitLabSearchResponseSchema.parse({
+    count: parseInt(response.headers.get("X-Total") || "0"),
+    items: projects,
+  });
+}
+
 async function createRepository(
   options: z.infer<typeof CreateRepositoryOptionsSchema>
 ): Promise<GitLabRepository> {
@@ -449,6 +491,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: "search_repositories",
         description: "Search for GitLab projects",
         inputSchema: zodToJsonSchema(SearchRepositoriesSchema),
+      },
+      {
+        name: "list_my_projects",
+        description: "List your own GitLab projects",
+        inputSchema: zodToJsonSchema(ListMyProjectsSchema),
       },
       {
         name: "create_repository",
@@ -531,6 +578,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           args.page,
           args.per_page
         );
+        return {
+          content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
+        };
+      }
+
+      case "list_my_projects": {
+        const args = ListMyProjectsSchema.parse(request.params.arguments);
+        const results = await listMyProjects(args);
         return {
           content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
         };
