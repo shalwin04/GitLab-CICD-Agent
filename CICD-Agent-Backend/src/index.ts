@@ -4,8 +4,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { exchangeGitlabToken } from "./utils/exchangeGitlabToken.js";
 import { v4 as uuidv4 } from "uuid";
-import { chatAgent } from "./agents/chatAgent.js"; // Import the agent factory
+import { createChatAgentNode } from "./agents/chatAgent.js"; // Import the agent factory
 import { ChatSession } from "./types.js";
+import { createDevopsGraph } from "./graph/graph.js";
+import { GraphState } from "./graph/graphState.js";
 
 dotenv.config();
 
@@ -95,27 +97,13 @@ const oauthCallbackHandler: RequestHandler = async (req, res) => {
 
     const sessionId = uuidv4();
 
-    // Initialize chat agent with the token
-    try {
-      console.log("🔄 Initializing chat agent for session:", sessionId);
-      const { agent, mcpClient } = await chatAgent(data.access_token!);
+    // Store the session with token
+    activeSessions.set(sessionId, {
+      token: data.access_token!,
+      createdAt: new Date(),
+    });
 
-      // Store the session
-      activeSessions.set(sessionId, {
-        token: data.access_token as any,
-        agent,
-        mcpClient,
-        createdAt: new Date(),
-      });
-
-      console.log(
-        "✅ Chat agent initialized successfully for session:",
-        sessionId
-      );
-    } catch (agentError) {
-      console.error("❌ Failed to initialize chat agent:", agentError);
-      // Continue without failing the OAuth flow
-    }
+    console.log("✅ Session created successfully:", sessionId);
 
     res.status(200).json({ ...data, sessionId });
   } catch (err) {
@@ -152,16 +140,30 @@ const chatHandler: RequestHandler = async (req, res) => {
     console.log(`🔄 Processing chat request for session: ${sessionId}`);
     console.log(`📝 Message: ${message.substring(0, 100)}...`);
 
-    const result = await session.agent.invoke({
-      messages: message,
-    });
+    // Create initial state for the graph (clean, no token)
+    const initialState: typeof GraphState.State = {
+      userMessage: message,
+      plans: "",
+      generatedCode: "",
+      testResults: "",
+      finalResult: "",
+      agentTrace: [],
+    };
 
-    const response = result.messages[result.messages.length - 1].content;
+    // Create graph with the session's GitLab token from OAuth
+    console.log(`🔑 Using GitLab token for session: ${sessionId}`);
+    const devopsGraph = createDevopsGraph(session.token);
+    const compiledGraph = devopsGraph.compile();
+    const result = await compiledGraph.invoke(initialState);
 
-    console.log(`✅ Chat response generated for session: ${sessionId}`);
+    console.log(`✅ Graph execution completed for session: ${sessionId}`);
 
     res.json({
-      response,
+      response: result.finalResult,
+      plans: result.plans,
+      generatedCode: result.generatedCode,
+      testResults: result.testResults,
+      agentTrace: result.agentTrace,
       sessionId,
       timestamp: new Date().toISOString(),
     });
@@ -190,7 +192,7 @@ const sessionStatusHandler: RequestHandler = async (req, res) => {
     sessionId,
     isActive: true,
     createdAt: session.createdAt,
-    hasAgent: !!session.agent,
+    hasAgent: false,
   });
 };
 
@@ -198,18 +200,7 @@ const sessionStatusHandler: RequestHandler = async (req, res) => {
 const cleanupSessionHandler: RequestHandler = async (req, res) => {
   const { sessionId } = req.params;
 
-  const session = activeSessions.get(sessionId);
-  if (session) {
-    // Close MCP client if it exists
-    if (session.mcpClient) {
-      try {
-        session.mcpClient.close();
-        console.log(`🧹 Cleaned up MCP client for session: ${sessionId}`);
-      } catch (error) {
-        console.warn(`⚠️  Error cleaning up MCP client: ${error}`);
-      }
-    }
-
+  if (activeSessions.has(sessionId)) {
     activeSessions.delete(sessionId);
     console.log(`🗑️  Session ${sessionId} deleted`);
   }
@@ -233,14 +224,6 @@ setInterval(() => {
   }
 
   for (const sessionId of expiredSessions) {
-    const session = activeSessions.get(sessionId);
-    if (session?.mcpClient) {
-      try {
-        session.mcpClient.close();
-      } catch (error) {
-        console.warn(`Error closing expired session ${sessionId}:`, error);
-      }
-    }
     activeSessions.delete(sessionId);
   }
 
@@ -277,22 +260,22 @@ const gracefulShutdown = () => {
   console.log("🛑 Shutting down gracefully...");
 
   // Clean up all active sessions
-  for (const [sessionId, session] of activeSessions.entries()) {
-    if (session.mcpClient) {
-      try {
-        session.mcpClient.close();
-      } catch (error) {
-        console.warn(
-          `Error closing session ${sessionId} during shutdown:`,
-          error
-        );
-      }
-    }
-  }
-
   activeSessions.clear();
+
   process.exit(0);
 };
+
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);
+
+app.listen(PORT, () => {
+  console.log(`OAuth server listening at http://localhost:${PORT}`);
+  console.log("Available endpoints:");
+  console.log("- POST /api/oauth/callback");
+  console.log("- POST /api/chat");
+  console.log("- GET /api/session/:sessionId/status");
+  console.log("- DELETE /api/session/:sessionId");
+});
 
 process.on("SIGINT", gracefulShutdown);
 process.on("SIGTERM", gracefulShutdown);

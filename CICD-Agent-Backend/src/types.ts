@@ -10,7 +10,7 @@ export interface GitLabOAuthResponse {
 
 export interface ChatSession {
   token: string;
-  agent: any;
-  mcpClient: any;
+  // agent: any;
+  // mcpClient: any;
   createdAt: Date;
 }
