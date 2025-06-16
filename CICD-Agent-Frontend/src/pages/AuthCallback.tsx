@@ -41,8 +41,10 @@ const AuthCallback = () => {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.access_token) {
+        if (data.access_token && data.sessionId) {
+          // Store both access token and session ID
           localStorage.setItem("accessToken", data.access_token);
+          localStorage.setItem("sessionId", data.sessionId);
           sessionStorage.setItem(attemptKey, "completed");
           setStatus("Success! Redirecting...");
           setTimeout(() => (window.location.href = "/chat"), 1000);
@@ -55,7 +57,7 @@ const AuthCallback = () => {
         setStatus(`Authentication failed: ${error.message}`);
         sessionStorage.removeItem(attemptKey);
       });
-  }, [searchParams]); // Only depend on searchParams
+  }, [searchParams]);
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black text-white">
