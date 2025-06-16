@@ -8,7 +8,6 @@ import { z } from "zod";
 dotenv.config();
 
 const API_KEY = process.env.GEMINI_API_KEY!;
-const GITLAB_TOKEN = process.env.GITLAB_TOKEN!;
 const MCP_SERVER_URL = "http://localhost:3001/mcp";
 
 // Simplified MCP Client that handles SSE responses
@@ -18,6 +17,9 @@ class SimpleMCPClient {
   private requestId = 1;
 
   constructor(gitlabToken: string) {
+    if (!gitlabToken) {
+      throw new Error("GitLab token is required");
+    }
     this.baseHeaders = {
       "X-GitLab-Token": gitlabToken,
       "Content-Type": "application/json",
@@ -276,6 +278,63 @@ function createLangChainTools(mcpClient: SimpleMCPClient) {
     tool(
       async (input) => {
         try {
+          const result = await mcpClient.callTool("list_my_projects", input);
+          return JSON.stringify(result, null, 2);
+        } catch (error) {
+          return `Error: ${
+            error instanceof Error ? error.message : String(error)
+          }`;
+        }
+      },
+      {
+        name: "list_my_projects",
+        description:
+          "List your own GitLab projects that you own or are a member of",
+        schema: z.object({
+          page: z.number().optional().describe("Page number (default: 1)"),
+          per_page: z
+            .number()
+            .optional()
+            .describe("Results per page (default: 20)"),
+          owned: z
+            .boolean()
+            .optional()
+            .describe("Only owned projects (default: true)"),
+          membership: z
+            .boolean()
+            .optional()
+            .describe("Include member projects (default: false)"),
+          starred: z
+            .boolean()
+            .optional()
+            .describe("Include starred projects (default: false)"),
+          archived: z
+            .boolean()
+            .optional()
+            .describe("Include archived projects (default: false)"),
+          visibility: z
+            .enum(["private", "internal", "public"])
+            .optional()
+            .describe("Filter by visibility"),
+          order_by: z
+            .enum([
+              "id",
+              "name",
+              "path",
+              "created_at",
+              "updated_at",
+              "last_activity_at",
+            ])
+            .optional()
+            .describe("Order by field"),
+          sort: z.enum(["asc", "desc"]).optional().describe("Sort direction"),
+        }),
+      }
+    ),
+
+    tool(
+      async (input) => {
+        try {
           const result = await mcpClient.callTool("create_repository", input);
           return JSON.stringify(result, null, 2);
         } catch (error) {
@@ -480,12 +539,17 @@ function createLangChainTools(mcpClient: SimpleMCPClient) {
   return tools;
 }
 
-async function initializeAgent() {
+// Factory function to create chat agent with token
+export async function chatAgent(gitlabToken: string) {
   let mcpClient: SimpleMCPClient | null = null;
 
   try {
+    if (!gitlabToken) {
+      throw new Error("GitLab token is required");
+    }
+
     // 1. Initialize MCP client
-    mcpClient = new SimpleMCPClient(GITLAB_TOKEN);
+    mcpClient = new SimpleMCPClient(gitlabToken);
     await mcpClient.initialize();
 
     // 2. List available tools from server
@@ -514,6 +578,7 @@ async function initializeAgent() {
 Available GitLab operations:
 - search_repositories: Search for GitLab repositories
 - get_file_contents: Get contents of files from repositories
+- list_my_projects: List your GitLab projects
 - create_repository: Create new repositories
 - create_issue: Create issues in repositories
 - create_or_update_file: Create or update files in repositories
@@ -523,7 +588,9 @@ Available GitLab operations:
 - create_branch: Create new branches
 
 When using these tools, always provide clear and structured responses to the user.
-For project IDs, you can use either the numeric ID or the URL-encoded project path (e.g., "group%2Fproject").`,
+For project IDs, you can use either the numeric ID or the URL-encoded project path (e.g., "group%2Fproject").
+
+Always be helpful and provide comprehensive responses. If you need to perform multiple operations, explain what you're doing step by step.`,
       ],
       ["human", "{messages}"],
     ]);
@@ -545,126 +612,5 @@ For project IDs, you can use either the numeric ID or the URL-encoded project pa
   }
 }
 
-// Test function
-async function testAgent(agent: any) {
-  try {
-    console.log("\n🔄 Testing agent with a simple query...");
-
-    const result = await agent.invoke({
-      messages:
-        "What tools do you have available for GitLab operations? Please list them with brief descriptions.",
-    });
-
-    console.log("✅ Agent response:");
-    console.log(result.messages[result.messages.length - 1].content);
-  } catch (error) {
-    console.error("❌ Error testing agent:", error);
-  }
-}
-
-// Interactive query function
-async function runInteractiveSession(agent: any) {
-  const readline = await import("readline");
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const askQuestion = (question: string): Promise<string> => {
-    return new Promise((resolve) => {
-      rl.question(question, resolve);
-    });
-  };
-
-  console.log("\n🎯 Interactive GitLab Agent Session Started!");
-  console.log("💡 You can ask me to:");
-  console.log("   - Search for repositories");
-  console.log("   - Get file contents");
-  console.log("   - Create repositories, issues, or merge requests");
-  console.log("   - Push files or create branches");
-  console.log("   - Type 'exit' or 'quit' to end the session\n");
-
-  while (true) {
-    try {
-      const userInput = await askQuestion(
-        "🤖 How can I help you with GitLab? "
-      );
-
-      if (
-        userInput.toLowerCase() === "exit" ||
-        userInput.toLowerCase() === "quit"
-      ) {
-        console.log("👋 Goodbye!");
-        break;
-      }
-
-      if (!userInput.trim()) {
-        console.log("Please enter a valid question or command.");
-        continue;
-      }
-
-      console.log("\n🔄 Processing your request...");
-
-      const result = await agent.invoke({
-        messages: userInput,
-      });
-
-      console.log("\n✅ Response:");
-      console.log("─".repeat(50));
-      console.log(result.messages[result.messages.length - 1].content);
-      console.log("─".repeat(50) + "\n");
-    } catch (error) {
-      console.error("❌ Error processing request:", error);
-      console.log("Please try again with a different request.\n");
-    }
-  }
-
-  rl.close();
-}
-
-// Main execution
-async function main() {
-  let mcpClient: SimpleMCPClient | null = null;
-
-  try {
-    const { agent, mcpClient: client } = await initializeAgent();
-    mcpClient = client;
-
-    await testAgent(agent);
-
-    console.log(
-      "\n🎉 Setup complete! You can now use the agent for GitLab operations."
-    );
-
-    // Start interactive session
-    await runInteractiveSession(agent);
-  } catch (error) {
-    console.error("💥 Fatal error:", error);
-    if (mcpClient) {
-      mcpClient.close();
-    }
-    process.exit(1);
-  } finally {
-    // Cleanup
-    if (mcpClient) {
-      console.log("🧹 Cleaning up MCP client...");
-      mcpClient.close();
-    }
-    process.exit(0);
-  }
-}
-
-// Handle graceful shutdown
-process.on("SIGINT", () => {
-  console.log("\n🛑 Shutting down gracefully...");
-  process.exit(0);
-});
-
-process.on("SIGTERM", () => {
-  console.log("\n🛑 Received SIGTERM, shutting down...");
-  process.exit(0);
-});
-
-// Run the application
-main();
+// Export the MCP client class in case it's needed elsewhere
+export { SimpleMCPClient };

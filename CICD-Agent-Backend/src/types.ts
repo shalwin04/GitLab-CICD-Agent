@@ -7,3 +7,10 @@ export interface GitLabOAuthResponse {
   error?: string;
   error_description?: string;
 }
+
+export interface ChatSession {
+  token: string;
+  agent: any;
+  mcpClient: any;
+  createdAt: Date;
+}
