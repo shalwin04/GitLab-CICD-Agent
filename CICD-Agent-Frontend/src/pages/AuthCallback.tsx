@@ -34,7 +34,7 @@ const AuthCallback = () => {
     sessionStorage.setItem(attemptKey, "processing");
 
     // Process the authentication
-    fetch("http://localhost:4000/api/oauth/callback", {
+    fetch("https://gitlab-cicd-agent-backend.onrender.com/api/oauth/callback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
