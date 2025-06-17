@@ -13,7 +13,7 @@ dotenv.config();
 
 const GITLAB_CLIENT_ID = process.env.GITLAB_CLIENT_ID!;
 const GITLAB_CLIENT_SECRET = process.env.GITLAB_CLIENT_SECRET!;
-const REDIRECT_URI = "http://localhost:5173/oauth/callback";
+const REDIRECT_URI = "https://git-lab-cicd-agent.vercel.app/oauth/callback";
 
 // Debug environment variables
 console.log("Environment check:");
@@ -30,7 +30,7 @@ const PORT = 4000;
 
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ["https://git-lab-cicd-agent.vercel.app/"],
     credentials: true,
   })
 );
