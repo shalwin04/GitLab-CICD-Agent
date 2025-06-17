@@ -30,7 +30,7 @@ const PORT = 4000;
 
 app.use(
   cors({
-    origin: ["https://git-lab-cicd-agent.vercel.app/"],
+    origin: ["https://git-lab-cicd-agent.vercel.app"],
     credentials: true,
   })
 );
