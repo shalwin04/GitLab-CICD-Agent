@@ -37,7 +37,7 @@ const Chat: React.FC = () => {
       setSessionId(storedSessionId);
 
       // Verify session is still active
-      fetch(`http://localhost:4000/api/session/${storedSessionId}/status`)
+      fetch(`https://gitlab-cicd-agent-backend.onrender.com/api/session/${storedSessionId}/status`)
         .then((res) => res.json())
         .then((data) => {
           if (!data.isActive) {
@@ -79,11 +79,11 @@ const Chat: React.FC = () => {
     console.log("🚀 Sending message:", {
       sessionId,
       message: userMessage.content,
-      url: "http://localhost:4000/api/chat",
+      url: "https://gitlab-cicd-agent-backend.onrender.com/api/chat",
     });
 
     try {
-      const response = await fetch("http://localhost:4000/api/chat", {
+      const response = await fetch("https://gitlab-cicd-agent-backend.onrender.com/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -155,7 +155,7 @@ const Chat: React.FC = () => {
 
   const connectWithGitLab = () => {
     const clientId = import.meta.env.VITE_GITLAB_CLIENT_ID;
-    const redirectUri = "http://localhost:5173/oauth/callback";
+    const redirectUri = "https://git-lab-cicd-agent.vercel.app/oauth/callback";
     const scope = "read_user api";
 
     const url = `https://gitlab.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(
@@ -186,7 +186,7 @@ const Chat: React.FC = () => {
   const disconnect = () => {
     if (sessionId) {
       // Clean up session on server
-      fetch(`http://localhost:4000/api/session/${sessionId}`, {
+      fetch(`https://gitlab-cicd-agent-backend.onrender.com/api/session/${sessionId}`, {
         method: "DELETE",
       }).catch((err) => console.warn("Error cleaning up session:", err));
     }
