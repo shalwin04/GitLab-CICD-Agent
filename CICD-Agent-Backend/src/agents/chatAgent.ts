@@ -14,7 +14,7 @@ import {
 dotenv.config();
 
 const API_KEY = process.env.GEMINI_API_KEY!;
-const MCP_SERVER_URL = "http://localhost:3001/mcp";
+const MCP_SERVER_URL = "https://gitlab-cicd-agent.onrender.com/mcp";
 
 // Simplified MCP Client that handles SSE responses
 class SimpleMCPClient {
