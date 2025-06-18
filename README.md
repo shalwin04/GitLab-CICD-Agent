@@ -16,7 +16,8 @@ Whether you're a developer looking to set up a CI/CD pipeline or an ops engineer
 
 ## 📟️ Demo
 
-Coming Soon...
+[Live Application](https://git-lab-cicd-agent.vercel.app/)
+[youtube demo](https://www.youtube.com/watch?v=lCwZ1eVZkLg)
 
 ---
 
