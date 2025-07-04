@@ -47,6 +47,13 @@ export function Login({
     if (error) {
       alert("Login failed: " + error.message);
     } else {
+      // 👇 Ping the backend /health endpoint
+      try {
+        await fetch("https://gitlab-cicd-agent-backend.onrender.com/health");
+        console.log("✅ Backend warmed up");
+      } catch (healthErr) {
+        console.warn("⚠️ Backend health check failed:", healthErr);
+      }
       onOpenChange(false); // Close modal
       navigate("/chat"); // or wherever you want to navigate after login
     }
