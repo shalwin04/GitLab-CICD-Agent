@@ -36,45 +36,58 @@ class SimpleMCPClient {
   async initialize(): Promise<void> {
     console.log("🔄 Initializing MCP session...");
 
-    // Send initialize request
-    const response = await fetch(MCP_SERVER_URL, {
-      method: "POST",
-      headers: this.baseHeaders,
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "initialize",
-        params: {
-          protocolVersion: "2024-11-05",
-          capabilities: {
-            tools: {},
-          },
-          clientInfo: {
-            name: "cicd-agent-backend",
-            version: "1.0.0",
-          },
-        },
-        id: this.requestId++,
-      }),
-    });
+    const maxRetries = 3;
+    let attempt = 0;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Failed to initialize MCP session: ${response.status} ${response.statusText} - ${errorText}`
-      );
+    while (attempt < maxRetries) {
+      const response = await fetch(MCP_SERVER_URL, {
+        method: "POST",
+        headers: this.baseHeaders,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: { tools: {} },
+            clientInfo: {
+              name: "cicd-agent-backend",
+              version: "1.0.0",
+            },
+          },
+          id: this.requestId++,
+        }),
+      });
+
+      if (response.status === 429) {
+        const waitTime = Math.pow(2, attempt) * 1000;
+        console.warn(`⚠️ Rate limited (429). Retrying in ${waitTime}ms...`);
+        await new Promise((res) => setTimeout(res, waitTime));
+        attempt++;
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to initialize MCP session: ${response.status} ${response.statusText} - ${errorText}`
+        );
+      }
+
+      // Success
+      this.sessionId = response.headers.get("mcp-session-id");
+      if (!this.sessionId) {
+        throw new Error("No session ID returned from server");
+      }
+
+      console.log("✅ Session initialized with ID:", this.sessionId);
+      await this.sendNotification("notifications/initialized", {});
+      console.log("✅ Initialization complete");
+      return;
     }
 
-    // Get session ID from response headers
-    this.sessionId = response.headers.get("mcp-session-id");
-    if (!this.sessionId) {
-      throw new Error("No session ID returned from server");
-    }
-
-    console.log("✅ Session initialized with ID:", this.sessionId);
-
-    // Send initialized notification
-    await this.sendNotification("notifications/initialized", {});
-    console.log("✅ Initialization complete");
+    throw new Error(
+      "❌ MCP session initialization failed after multiple retries."
+    );
   }
 
   private async sendNotification(method: string, params: any): Promise<void> {
