@@ -248,6 +248,11 @@ router.get("/test", (req, res) => {
   });
 });
 
+router.get("/health", (req, res) => {
+  console.log("🔁 Health check received");
+  res.status(200).json({ status: "ok" });
+});
+
 router.post("/oauth/callback", oauthCallbackHandler);
 router.post("/chat", chatHandler);
 router.get("/session/:sessionId/status", sessionStatusHandler);
